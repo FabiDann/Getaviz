@@ -196,6 +196,51 @@ let neo4jModelLoadController = (function () {
         return data;
     }
 
+    async function loadEntities(entities){
+        let data = new Array;
+
+        updateLoadSpinner(loaderController.toLoad);
+
+        for (const entity of entities){
+            let entityAlreadyInModel = model.getEntityById(element.id);
+
+            if(entityAlreadyInModel) {
+                return;
+            }
+            else {
+                const cypherQuery = `MATCH (n {hash: "${entity.id}"}) RETURN n`;
+                let response = await getNeo4jData(cypherQuery);
+                let loadedEntity = await getMetadataFromResponse(response);
+                data = data.concat(loadedEntity); 
+            } 
+        };
+
+        updateLoadSpinner(loaderController.loaded);
+
+        if (data.length > 0) {
+            let createdEntities = model.createEntities(data);
+            let loaded = await loadElementsAndChangeState(createdEntities);
+
+            if (loaded){
+                let applicationEvent = {			
+                    sender: 	 neo4jModelLoadController,
+                    entities:    entities
+                };
+                
+                events.loaded.on.publish(applicationEvent);
+            }
+        }
+    }
+
+    async function getRelatedEntities(entity){
+        const cypherQuery = `MATCH (n {hash: "${entity.id}"})<-[:EXTENDS]->(m) WHERE exists(m.metadata) RETURN m`;
+
+        let response = await getNeo4jData(cypherQuery);
+        let relatedEntities = await getMetadataFromResponse(response);
+
+        return relatedEntities;
+    }
+
 
     // Return metadata object from response
     async function getMetadataFromResponse(response) {
@@ -285,6 +330,8 @@ let neo4jModelLoadController = (function () {
         updateLoadSpinner: updateLoadSpinner,
         loaderController: loaderController,
         loadChildNodes: loadChildNodes,
-        loadNodesRecursively: loadNodesRecursively
+        loadNodesRecursively: loadNodesRecursively,
+        getRelatedEntities: getRelatedEntities,
+        loadEntities: loadEntities
     };
 })();
